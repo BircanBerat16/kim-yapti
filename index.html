@@ -517,15 +517,16 @@ function handleVotePhase(room){
   renderVoteAnswer(room);
 
   // Host: tüm oylar gelince reveal'a geç
-  // Her Firebase güncellemesinde kontrol et
   if(G.isHost){
     const votes = room.votes?.[qIdx] || {};
+    const answers = room.answers?.[qIdx] || {};
     const players = Object.keys(G.players);
-    // Her oyuncunun en az 1 oy verdiğini kontrol et
-    const allVoted = players.length > 1 && players.every(id => {
-      if(id === G.myId) return true; // host kendi cevabına oy veremez
-      return !!votes[id];
-    });
+    // Oy verebilecek oyuncular: cevap yazan herkese karşı oy verebilecekler
+    // Her oyuncu kendi cevabı hariç diğerlerine oy verir
+    // Basit kontrol: oy veren sayısı == oyuncu sayısı (herkes en az 1 oy verdiyse)
+    const voteCount = Object.keys(votes).length;
+    const playerCount = players.length;
+    const allVoted = playerCount > 1 && voteCount >= playerCount;
     if(allVoted && !G.revealTriggered){
       G.revealTriggered = true;
       setTimeout(()=>{
