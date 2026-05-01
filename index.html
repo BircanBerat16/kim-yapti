@@ -459,31 +459,42 @@ window.startGame = async function(){
 // ── ANSWER PHASE ──
 function handleAnswerPhase(room){
   const qIdx = room.currentQ||0;
-  G.currentQ = qIdx;
 
+  // Yeni soru gelince typing state'i sıfırla
+  if(G.currentQ !== qIdx){
+    G.currentQ = qIdx;
+    G.typingAnswer = false;
+    document.getElementById('ans-input').value = '';
+    document.getElementById('ans-input').disabled = false;
+    document.getElementById('ans-btn').style.display = 'block';
+    document.getElementById('ans-wait').style.display = 'none';
+  }
+
+  G.currentQ = qIdx;
   showScreen('answer');
   document.getElementById('q-number').textContent = `Soru ${qIdx+1} / ${G.questions.length}`;
   document.getElementById('q-text').textContent = G.questions[qIdx];
 
   const answers = room.answers?.[qIdx] || {};
-  const total = Object.keys(G.players).length;
+  const total = Object.keys(room.players||{}).length;
   const done = Object.keys(answers).length;
   document.getElementById('ans-count').textContent = `${done} / ${total} cevapladı`;
   document.getElementById('ans-progress').style.width = total ? (done/total*100)+'%' : '0%';
 
   const myAnswered = answers[G.myId];
   if(myAnswered){
+    // Ben cevapladım — kilitle
     document.getElementById('ans-input').value = myAnswered;
     document.getElementById('ans-input').disabled = true;
     document.getElementById('ans-btn').style.display = 'none';
     document.getElementById('ans-wait').style.display = 'block';
-  } else if(!G.typingAnswer) {
-    // Sadece henüz yazmaya başlamamışsa sıfırla
-    document.getElementById('ans-input').value = '';
+  } else if(!G.typingAnswer){
+    // Henüz yazmaya başlamadım — inputa dokunma, sadece buton göster
     document.getElementById('ans-input').disabled = false;
     document.getElementById('ans-btn').style.display = 'block';
     document.getElementById('ans-wait').style.display = 'none';
   }
+  // G.typingAnswer=true ise input'a hiç dokunma — yazan kişiyi koru
 
   // Host: tüm cevaplar gelince voting'e geç
   if(G.isHost && done >= total && total > 0){
@@ -591,24 +602,24 @@ window.nextAnswer = function(){
 };
 
 window.confirmVote = async function(){
-  if(!G.selectedVote){ toast('Birini seç!'); return; }
+  const chosenId = G.selectedVote;
+  if(!chosenId){ toast('Birini seç!'); return; }
   const qIdx = G.currentQ;
   const [authorId] = G.voteAnswers[G.currentAnsIdx];
   const myVoteKey = `${qIdx}_${G.currentAnsIdx}`;
 
   if(G.myVotes[myVoteKey]) return;
-  G.myVotes[myVoteKey] = G.selectedVote;
+  G.myVotes[myVoteKey] = chosenId;
 
-  const correct = G.selectedVote === authorId;
+  const correct = chosenId === authorId;
   if(correct){
     const snap = await get(ref(db,`rooms/${G.roomCode}/scores/${G.myId}`));
     const cur = snap.val()||0;
     await set(ref(db,`rooms/${G.roomCode}/scores/${G.myId}`), cur+1);
   }
 
-  // authorId ile kaydet — sıra bağımsız, güvenilir
-  await update(ref(db,`rooms/${G.roomCode}/votes/${qIdx}/${authorId}`),
-    { [G.myId]: G.selectedVote });
+  // votes/soruNo/cevapSahibiId/oyVerenId = seçilenKişiId
+  await set(ref(db,`rooms/${G.roomCode}/votes/${qIdx}/${authorId}/${G.myId}`), chosenId);
 
   document.getElementById('vote-confirm-btn').style.display='none';
   document.getElementById('vote-done-msg').style.display='block';
