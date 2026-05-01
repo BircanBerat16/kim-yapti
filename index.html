@@ -300,6 +300,10 @@ let G = {
 // ── INIT ──
 window.addEventListener('load', ()=>{
   G.myId = 'p_' + Math.random().toString(36).slice(2,10);
+  // Kullanıcı yazmaya başlayınca işaretle, gönderince temizle
+  document.getElementById('ans-input').addEventListener('input', ()=>{
+    G.typingAnswer = document.getElementById('ans-input').value.length > 0;
+  });
   showScreen('lobby');
 });
 
@@ -473,9 +477,10 @@ function handleAnswerPhase(room){
     document.getElementById('ans-input').disabled = true;
     document.getElementById('ans-btn').style.display = 'none';
     document.getElementById('ans-wait').style.display = 'block';
-  } else {
-    document.getElementById('ans-input').disabled = false;
+  } else if(!G.typingAnswer) {
+    // Sadece henüz yazmaya başlamamışsa sıfırla
     document.getElementById('ans-input').value = '';
+    document.getElementById('ans-input').disabled = false;
     document.getElementById('ans-btn').style.display = 'block';
     document.getElementById('ans-wait').style.display = 'none';
   }
@@ -489,6 +494,7 @@ function handleAnswerPhase(room){
 window.submitAnswer = async function(){
   const text = document.getElementById('ans-input').value.trim();
   if(!text){ toast('Bir şeyler yaz!'); return; }
+  G.typingAnswer = false;
   await update(ref(db, `rooms/${G.roomCode}/answers/${G.currentQ}`), { [G.myId]: text });
   document.getElementById('ans-input').disabled = true;
   document.getElementById('ans-btn').style.display = 'none';
@@ -587,24 +593,22 @@ window.nextAnswer = function(){
 window.confirmVote = async function(){
   if(!G.selectedVote){ toast('Birini seç!'); return; }
   const qIdx = G.currentQ;
-  const [actualId] = G.voteAnswers[G.currentAnsIdx];
+  const [authorId] = G.voteAnswers[G.currentAnsIdx];
   const myVoteKey = `${qIdx}_${G.currentAnsIdx}`;
 
-  // Zaten oyladıysa tekrar işleme
   if(G.myVotes[myVoteKey]) return;
   G.myVotes[myVoteKey] = G.selectedVote;
 
-  // Puanlama
-  const correct = G.selectedVote === actualId;
+  const correct = G.selectedVote === authorId;
   if(correct){
     const snap = await get(ref(db,`rooms/${G.roomCode}/scores/${G.myId}`));
     const cur = snap.val()||0;
     await set(ref(db,`rooms/${G.roomCode}/scores/${G.myId}`), cur+1);
   }
 
-  // Bu cevap için oyumu kaydet
-  await update(ref(db,`rooms/${G.roomCode}/votes/${qIdx}/${G.currentAnsIdx}`),
-    { voter: G.myId, guess: G.selectedVote, actual: actualId });
+  // authorId ile kaydet — sıra bağımsız, güvenilir
+  await update(ref(db,`rooms/${G.roomCode}/votes/${qIdx}/${authorId}`),
+    { [G.myId]: G.selectedVote });
 
   document.getElementById('vote-confirm-btn').style.display='none';
   document.getElementById('vote-done-msg').style.display='block';
@@ -613,10 +617,8 @@ window.confirmVote = async function(){
 
   const isLastAnswer = G.currentAnsIdx >= G.voteAnswers.length - 1;
   if(isLastAnswer){
-    // Tüm cevapları oyladım — bitti işaretle
     await update(ref(db,`rooms/${G.roomCode}/votedPlayers/${qIdx}`),{ [G.myId]: true });
   } else {
-    // Sonraki cevaba geç
     setTimeout(()=>{ G.currentAnsIdx++; renderVoteAnswer(); }, 1000);
   }
 };
@@ -632,34 +634,26 @@ function handleRevealPhase(room){
   document.getElementById('reveal-q-text').textContent = G.questions[qIdx];
 
   const answers = room.answers?.[qIdx] || {};
-  const votesPerAnswer = room.votes?.[qIdx] || {}; // {answerIdx: {voter, guess, actual}}
+  // votes yapısı: votes[qIdx][authorId][voterId] = guessedPlayerId
+  const votesForQ = room.votes?.[qIdx] || {};
 
-  // Her cevap için kimlerin ne seçtiğini topla
-  // answerEntries: [{authorId, text, answerIdx}]
-  const answerList = Object.entries(answers).map(([authorId, text], answerIdx) => ({
-    authorId, text, answerIdx: String(answerIdx)
-  }));
-
-  document.getElementById('reveal-answers-list').innerHTML = answerList.map(({authorId, text, answerIdx})=>{
+  document.getElementById('reveal-answers-list').innerHTML = Object.entries(answers).map(([authorId, text])=>{
     const author = G.players[authorId];
     if(!author) return '';
     const avClass = AV[author.avatarIdx||0];
 
-    // Bu cevap için yapılan oylar
-    const voteData = votesPerAnswer[answerIdx] || {};
-    // voteData = {voter: id, guess: id, actual: id} ya da birden fazla oy varsa nesne
-    // Birden fazla kişi aynı answerIdx'e oy verebilir — array olarak topla
-    const voteEntries = Array.isArray(voteData) ? voteData :
-      (voteData.voter ? [voteData] : Object.values(voteData).filter(v=>v&&v.voter));
+    // Bu cevap için oylar: {voterId: guessedId}
+    const votesForAnswer = votesForQ[authorId] || {};
 
-    const guessChips = voteEntries.map(v=>{
-      const voter = G.players[v.voter];
-      if(!voter || v.voter === authorId) return '';
-      const correct = v.guess === authorId;
-      return `<span class="guess-chip ${correct?'guess-correct':'guess-wrong'}">${voter.name} → ${correct ? author.name : (G.players[v.guess]?.name||'?')} ${correct?'✓':'✗'}</span>`;
+    const guessChips = Object.entries(votesForAnswer).map(([voterId, guessedId])=>{
+      const voter = G.players[voterId];
+      if(!voter) return '';
+      const correct = guessedId === authorId;
+      const guessedName = G.players[guessedId]?.name || '?';
+      return `<span class="guess-chip ${correct?'guess-correct':'guess-wrong'}">${voter.name} → ${guessedName} ${correct?'✓':'✗'}</span>`;
     }).filter(Boolean).join('');
 
-    const correctCount = voteEntries.filter(v=>v.guess===authorId).length;
+    const correctCount = Object.values(votesForAnswer).filter(g=>g===authorId).length;
 
     return `<div class="reveal-answer-card">
       <div class="reveal-answer-text">"${text}"</div>
@@ -671,7 +665,9 @@ function handleRevealPhase(room){
         </div>
         ${correctCount>0?`<span class="points-badge">+${correctCount} puan</span>`:''}
       </div>
-      ${guessChips ? `<div style="margin-top:6px;font-size:11px;color:var(--ink3);margin-bottom:4px;">Tahminler</div><div class="guesses-row">${guessChips}</div>` : '<div style="font-size:12px;color:var(--ink3);margin-top:4px;">Kimse tahmin etmedi</div>'}
+      ${guessChips
+        ? `<div style="margin-top:8px;font-size:11px;color:var(--ink3);margin-bottom:4px;">Tahminler</div><div class="guesses-row">${guessChips}</div>`
+        : `<div style="font-size:12px;color:var(--ink3);margin-top:6px;">Kimse tahmin etmedi</div>`}
     </div>`;
   }).join('');
 
