@@ -516,38 +516,37 @@ window.submitAnswer = async function(){
 function handleVotePhase(room){
   const qIdx = room.currentQ||0;
   G.currentQ = qIdx;
-
-  // G.players'ı her zaman room'dan güncelle
   G.players = room.players || {};
 
   const answers = room.answers?.[qIdx] || {};
-  const answerEntries = Object.entries(answers).filter(([id])=>id!==G.myId);
-  G.voteAnswers = answerEntries;
+
+  // voteAnswers'ı sadece yeni soru gelince set et — sıra tutarlı kalsın
+  if(G.lastVoteQ !== qIdx){
+    G.lastVoteQ = qIdx;
+    G.currentAnsIdx = 0;
+    G.selectedVote = null;
+    // Kendi cevabım hariç, sabit sıraya göre kaydet
+    G.voteAnswers = Object.entries(answers)
+      .filter(([id])=>id!==G.myId)
+      .sort((a,b)=>a[0].localeCompare(b[0])); // ID'ye göre sabit sırala
+  }
 
   showScreen('vote');
   document.getElementById('vote-q-text').textContent = G.questions[qIdx];
 
-  if(answerEntries.length===0){
-    if(G.isHost) update(G.roomRef,{phase:'reveal',currentQ:qIdx});
+  if(!G.voteAnswers || G.voteAnswers.length===0){
+    // Oylanacak cevap yok (herkese ait tek cevap vs)
+    update(ref(db,`rooms/${G.roomCode}/votedPlayers/${qIdx}`),{ [G.myId]: true });
     return;
-  }
-
-  // İlk açılışta currentAnsIdx'i sıfırla
-  if(G.lastVoteQ !== qIdx){
-    G.lastVoteQ = qIdx;
-    G.currentAnsIdx = 0;
   }
 
   renderVoteAnswer();
 
-  // Host: reveal kontrolü — room'daki gerçek player sayısını kullan
+  // Host: reveal kontrolü
   if(G.isHost){
     const votedPlayers = room.votedPlayers?.[qIdx] || {};
     const roomPlayerCount = Object.keys(room.players||{}).length;
     const votedCount = Object.keys(votedPlayers).length;
-
-    console.log(`Vote check: voted=${votedCount}, players=${roomPlayerCount}`);
-
     if(votedCount >= roomPlayerCount && roomPlayerCount > 1 && !G.revealTriggered){
       G.revealTriggered = true;
       setTimeout(()=>{
