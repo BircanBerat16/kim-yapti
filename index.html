@@ -625,28 +625,41 @@ window.confirmVote = async function(){
 function handleRevealPhase(room){
   const qIdx = room.currentQ||0;
   G.revealQ = qIdx;
+  G.players = room.players || {};
   showScreen('reveal');
 
   document.getElementById('reveal-q-label').textContent = `Soru ${qIdx+1} / ${G.questions.length}`;
   document.getElementById('reveal-q-text').textContent = G.questions[qIdx];
 
   const answers = room.answers?.[qIdx] || {};
-  const votes = room.votes?.[qIdx] || {};
+  const votesPerAnswer = room.votes?.[qIdx] || {}; // {answerIdx: {voter, guess, actual}}
 
-  document.getElementById('reveal-answers-list').innerHTML = Object.entries(answers).map(([authorId, text])=>{
+  // Her cevap için kimlerin ne seçtiğini topla
+  // answerEntries: [{authorId, text, answerIdx}]
+  const answerList = Object.entries(answers).map(([authorId, text], answerIdx) => ({
+    authorId, text, answerIdx: String(answerIdx)
+  }));
+
+  document.getElementById('reveal-answers-list').innerHTML = answerList.map(({authorId, text, answerIdx})=>{
     const author = G.players[authorId];
     if(!author) return '';
     const avClass = AV[author.avatarIdx||0];
 
-    // Kim bu cevabı tahmin etti?
-    const guessChips = Object.entries(votes).map(([voterId, guessedId])=>{
-      const voter = G.players[voterId];
-      if(!voter) return '';
-      const correct = guessedId === authorId;
-      return `<span class="guess-chip ${correct?'guess-correct':'guess-wrong'}">${voter.name} ${correct?'✓':'✗'}</span>`;
-    }).join('');
+    // Bu cevap için yapılan oylar
+    const voteData = votesPerAnswer[answerIdx] || {};
+    // voteData = {voter: id, guess: id, actual: id} ya da birden fazla oy varsa nesne
+    // Birden fazla kişi aynı answerIdx'e oy verebilir — array olarak topla
+    const voteEntries = Array.isArray(voteData) ? voteData :
+      (voteData.voter ? [voteData] : Object.values(voteData).filter(v=>v&&v.voter));
 
-    const correctCount = Object.values(votes).filter(g=>g===authorId).length;
+    const guessChips = voteEntries.map(v=>{
+      const voter = G.players[v.voter];
+      if(!voter || v.voter === authorId) return '';
+      const correct = v.guess === authorId;
+      return `<span class="guess-chip ${correct?'guess-correct':'guess-wrong'}">${voter.name} → ${correct ? author.name : (G.players[v.guess]?.name||'?')} ${correct?'✓':'✗'}</span>`;
+    }).filter(Boolean).join('');
+
+    const correctCount = voteEntries.filter(v=>v.guess===authorId).length;
 
     return `<div class="reveal-answer-card">
       <div class="reveal-answer-text">"${text}"</div>
@@ -656,9 +669,9 @@ function handleRevealPhase(room){
           <div style="font-size:12px;color:var(--ink3);">Yazan</div>
           <div style="font-size:13px;font-weight:700;">${author.name}</div>
         </div>
-        ${correctCount>0?`<span class="points-badge">+${correctCount}</span>`:''}
+        ${correctCount>0?`<span class="points-badge">+${correctCount} puan</span>`:''}
       </div>
-      ${guessChips?`<div class="guesses-row">${guessChips}</div>`:''}
+      ${guessChips ? `<div style="margin-top:6px;font-size:11px;color:var(--ink3);margin-bottom:4px;">Tahminler</div><div class="guesses-row">${guessChips}</div>` : '<div style="font-size:12px;color:var(--ink3);margin-top:4px;">Kimse tahmin etmedi</div>'}
     </div>`;
   }).join('');
 
