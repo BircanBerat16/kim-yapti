@@ -517,11 +517,22 @@ function handleVotePhase(room){
   renderVoteAnswer(room);
 
   // Host: tüm oylar gelince reveal'a geç
-  const votes = room.votes?.[qIdx] || {};
-  const players = Object.keys(G.players);
-  const allVoted = players.every(id => id===G.myId || votes[id]);
-  if(G.isHost && allVoted && players.length > 1){
-    setTimeout(()=> update(G.roomRef,{phase:'reveal',currentQ:qIdx}), 1200);
+  // Her Firebase güncellemesinde kontrol et
+  if(G.isHost){
+    const votes = room.votes?.[qIdx] || {};
+    const players = Object.keys(G.players);
+    // Her oyuncunun en az 1 oy verdiğini kontrol et
+    const allVoted = players.length > 1 && players.every(id => {
+      if(id === G.myId) return true; // host kendi cevabına oy veremez
+      return !!votes[id];
+    });
+    if(allVoted && !G.revealTriggered){
+      G.revealTriggered = true;
+      setTimeout(()=>{
+        G.revealTriggered = false;
+        update(G.roomRef,{phase:'reveal', currentQ:qIdx});
+      }, 1500);
+    }
   }
 }
 
@@ -689,9 +700,5 @@ window.resetGame = async function(){
 };
 
 </script>
-  <div style="text-align:center;padding:20px;font-size:12px;color:#b0ada8;font-family:'Instrument Sans',sans-serif;">
-  <a href="/privacy.html" style="color:#b0ada8;text-decoration:none;">Gizlilik Politikası</a>
-  · © 2025 Kim Yaptı?
-</div>
 </body>
 </html>
