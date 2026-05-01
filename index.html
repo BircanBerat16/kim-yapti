@@ -518,16 +518,14 @@ function handleVotePhase(room){
 
   // Host: tüm oylar gelince reveal'a geç
   if(G.isHost){
-    const votes = room.votes?.[qIdx] || {};
+    const votedPlayers = room.votedPlayers?.[qIdx] || {};
     const answers = room.answers?.[qIdx] || {};
-    const players = Object.keys(G.players);
-    // Oy verebilecek oyuncular: cevap yazan herkese karşı oy verebilecekler
-    // Her oyuncu kendi cevabı hariç diğerlerine oy verir
-    // Basit kontrol: oy veren sayısı == oyuncu sayısı (herkes en az 1 oy verdiyse)
-    const voteCount = Object.keys(votes).length;
-    const playerCount = players.length;
-    const allVoted = playerCount > 1 && voteCount >= playerCount;
-    if(allVoted && !G.revealTriggered){
+    const playerCount = Object.keys(G.players).length;
+    const votedCount = Object.keys(votedPlayers).length;
+    // Kaç kişi oy verebilir? Herkes diğerlerinin cevabına oy verir
+    // En az (playerCount - 1) kişi oy verdiyse geç (1 kişi kendi cevabını atlayabilir)
+    const threshold = Math.max(1, playerCount - 1);
+    if(votedCount >= threshold && playerCount > 1 && !G.revealTriggered){
       G.revealTriggered = true;
       setTimeout(()=>{
         G.revealTriggered = false;
@@ -600,8 +598,9 @@ window.confirmVote = async function(){
     await set(ref(db,`rooms/${G.roomCode}/scores/${G.myId}`), cur+1);
   }
 
-  // Oyumu kaydet
+  // Oyumu ve "oy verdim" işaretini kaydet
   await update(ref(db,`rooms/${G.roomCode}/votes/${qIdx}`),{ [G.myId]: G.selectedVote });
+  await update(ref(db,`rooms/${G.roomCode}/votedPlayers/${qIdx}`),{ [G.myId]: true });
 
   document.getElementById('vote-confirm-btn').style.display='none';
   document.getElementById('vote-done-msg').style.display='block';
