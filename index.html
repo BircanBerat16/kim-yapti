@@ -500,29 +500,38 @@ function handleVotePhase(room){
   const qIdx = room.currentQ||0;
   G.currentQ = qIdx;
 
-  showScreen('vote');
-  document.getElementById('vote-q-text').textContent = G.questions[qIdx];
+  // G.players'ı her zaman room'dan güncelle
+  G.players = room.players || {};
 
   const answers = room.answers?.[qIdx] || {};
   const answerEntries = Object.entries(answers).filter(([id])=>id!==G.myId);
-  G.voteAnswers = answerEntries; // [playerId, text][]
+  G.voteAnswers = answerEntries;
+
+  showScreen('vote');
+  document.getElementById('vote-q-text').textContent = G.questions[qIdx];
 
   if(answerEntries.length===0){
-    // Sadece 1 kişi varsa (edge case)
     if(G.isHost) update(G.roomRef,{phase:'reveal',currentQ:qIdx});
     return;
   }
 
-  G.currentAnsIdx = 0;
-  renderVoteAnswer(room);
+  // İlk açılışta currentAnsIdx'i sıfırla
+  if(G.lastVoteQ !== qIdx){
+    G.lastVoteQ = qIdx;
+    G.currentAnsIdx = 0;
+  }
 
-  // Host: tüm oylar gelince reveal'a geç
+  renderVoteAnswer();
+
+  // Host: reveal kontrolü — room'daki gerçek player sayısını kullan
   if(G.isHost){
     const votedPlayers = room.votedPlayers?.[qIdx] || {};
-    const playerCount = Object.keys(G.players).length;
+    const roomPlayerCount = Object.keys(room.players||{}).length;
     const votedCount = Object.keys(votedPlayers).length;
-    // Herkes oy vermiş olmalı
-    if(votedCount >= playerCount && playerCount > 1 && !G.revealTriggered){
+
+    console.log(`Vote check: voted=${votedCount}, players=${roomPlayerCount}`);
+
+    if(votedCount >= roomPlayerCount && roomPlayerCount > 1 && !G.revealTriggered){
       G.revealTriggered = true;
       setTimeout(()=>{
         G.revealTriggered = false;
@@ -581,6 +590,8 @@ window.confirmVote = async function(){
   const [actualId] = G.voteAnswers[G.currentAnsIdx];
   const myVoteKey = `${qIdx}_${G.currentAnsIdx}`;
 
+  // Zaten oyladıysa tekrar işleme
+  if(G.myVotes[myVoteKey]) return;
   G.myVotes[myVoteKey] = G.selectedVote;
 
   // Puanlama
@@ -591,22 +602,22 @@ window.confirmVote = async function(){
     await set(ref(db,`rooms/${G.roomCode}/scores/${G.myId}`), cur+1);
   }
 
-  // Oyumu kaydet
-  await update(ref(db,`rooms/${G.roomCode}/votes/${qIdx}`),{ [G.myId]: G.selectedVote });
+  // Bu cevap için oyumu kaydet
+  await update(ref(db,`rooms/${G.roomCode}/votes/${qIdx}/${G.currentAnsIdx}`),
+    { voter: G.myId, guess: G.selectedVote, actual: actualId });
 
   document.getElementById('vote-confirm-btn').style.display='none';
   document.getElementById('vote-done-msg').style.display='block';
   document.querySelectorAll('.vote-btn').forEach(b=>b.style.pointerEvents='none');
-
   toast(correct ? '✓ Doğru tahmin! +1 puan' : '✗ Yanlış tahmin');
 
-  // Son cevap mıydı? Evetse votedPlayers'a ekle
   const isLastAnswer = G.currentAnsIdx >= G.voteAnswers.length - 1;
   if(isLastAnswer){
+    // Tüm cevapları oyladım — bitti işaretle
     await update(ref(db,`rooms/${G.roomCode}/votedPlayers/${qIdx}`),{ [G.myId]: true });
   } else {
-    // Sonraki cevaba otomatik geç
-    setTimeout(()=>{ G.currentAnsIdx++; renderVoteAnswer(); }, 900);
+    // Sonraki cevaba geç
+    setTimeout(()=>{ G.currentAnsIdx++; renderVoteAnswer(); }, 1000);
   }
 };
 
