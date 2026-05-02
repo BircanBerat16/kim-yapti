@@ -699,8 +699,24 @@ function listenToRoom(){
 
     if(room.phase === 'waiting') renderWaiting(room);
     else if(room.phase === 'answering') handleAnswerPhase(room);
-    else if(room.phase === 'voting') handleVotePhase(room);
-    else if(room.phase === 'reveal') handleRevealPhase(room);
+    else if(room.phase === 'voting'){
+      // Cevap → oylama geçişinde herkes interstitial görsün
+      if(G.lastPhase !== 'voting'){
+        G.lastPhase = 'voting';
+        showInterstitial(()=> handleVotePhase(room));
+      } else {
+        handleVotePhase(room);
+      }
+    }
+    else if(room.phase === 'reveal'){
+      // Oylama → reveal geçişinde herkes interstitial görsün
+      if(G.lastPhase !== 'reveal'){
+        G.lastPhase = 'reveal';
+        showInterstitial(()=> handleRevealPhase(room));
+      } else {
+        handleRevealPhase(room);
+      }
+    }
     else if(room.phase === 'scores') handleScoresPhase(room);
   });
   G.unsubscribers.push(unsub);
@@ -777,16 +793,9 @@ function handleAnswerPhase(room){
   }
   // G.typingAnswer=true ise input'a hiç dokunma — yazan kişiyi koru
 
-  // Cevap ekranında sponsor banner
-  document.getElementById('answer-sponsor').innerHTML = sponsorBanner(true);
-
-  // Host: tüm cevaplar gelince interstitial göster, sonra voting'e geç
+  // Host: tüm cevaplar gelince voting'e geç
   if(G.isHost && done >= total && total > 0){
-    setTimeout(()=>{
-      showInterstitial(()=>{
-        update(G.roomRef, { phase:'voting', currentQ: qIdx });
-      });
-    }, 1200);
+    setTimeout(()=> update(G.roomRef, { phase:'voting', currentQ: qIdx }), 1200);
   }
 }
 
@@ -842,9 +851,7 @@ function handleVotePhase(room){
       G.revealTriggered = true;
       setTimeout(()=>{
         G.revealTriggered = false;
-        showInterstitial(()=>{
-          update(G.roomRef,{phase:'reveal', currentQ:qIdx});
-        });
+        update(G.roomRef,{phase:'reveal', currentQ:qIdx});
       }, 1500);
     }
   }
@@ -1035,7 +1042,7 @@ window.resetGame = async function(){
     selectedCats: new Set(), customQuestions:[],
     currentQ:0, currentAnsIdx:0, revealQ:0,
     myAnswers:{}, myVotes:{}, selectedVote:null, unsubscribers:[],
-    typingAnswer:false, lastVoteQ:null, revealTriggered:false };
+    typingAnswer:false, lastVoteQ:null, revealTriggered:false, lastPhase:null };
   document.getElementById('host-name').value='';
   document.getElementById('join-code').value='';
   document.getElementById('join-name').value='';
