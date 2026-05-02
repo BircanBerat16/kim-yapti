@@ -224,6 +224,20 @@ textarea.input-field{height:90px;resize:none;line-height:1.5;}
     <textarea class="input-field" id="ans-input" placeholder="Cevabını yaz..." maxlength="120"></textarea>
     <button class="btn btn-primary" id="ans-btn" onclick="submitAnswer()">Cevapla</button>
     <div class="status-msg" id="ans-wait" style="display:none;">Cevabın kaydedildi! Diğerleri bekleniyor...</div>
+    <div id="answer-sponsor"></div>
+  </div>
+</div>
+
+<!-- INTERSTITIAL (soru geçişi reklamı) -->
+<div class="screen" id="screen-interstitial">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;">
+    <div style="font-size:12px;color:var(--ink3);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.08em;">Sponsor</div>
+    <div id="interstitial-content" style="width:100%;max-width:360px;"></div>
+    <div style="margin-top:24px;display:flex;align-items:center;gap:8px;">
+      <div style="font-size:13px;color:var(--ink2);">Sonraki soruda devam ediliyor...</div>
+      <div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:var(--accent);min-width:24px;" id="interstitial-count">3</div>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:16px;width:auto;padding:8px 20px;font-size:13px;" onclick="skipInterstitial()">Geç →</button>
   </div>
 </div>
 
@@ -241,6 +255,7 @@ textarea.input-field{height:90px;resize:none;line-height:1.5;}
     <div class="vote-options" id="vote-options"></div>
     <button class="btn btn-primary" id="vote-confirm-btn" onclick="confirmVote()" style="display:none;">Onayla</button>
     <div class="status-msg" id="vote-done-msg" style="display:none;color:var(--green);">Oy kaydedildi ✓</div>
+    <div id="vote-sponsor"></div>
   </div>
 </div>
 
@@ -402,7 +417,7 @@ const SPONSOR = {
 };
 
 // ── SPONSOR BANNER ──
-function sponsorBanner(){
+function sponsorBanner(compact=false){
   if(!SPONSOR.active) return '';
   return `
     <a class="sponsor-banner" href="${SPONSOR.link}" target="_blank" rel="noopener"
@@ -415,11 +430,50 @@ function sponsorBanner(){
       <div class="sponsor-text">
         <div class="sponsor-label">Sponsor</div>
         <div class="sponsor-name">${SPONSOR.name}</div>
-        <div class="sponsor-slogan">${SPONSOR.slogan}</div>
+        ${!compact?`<div class="sponsor-slogan">${SPONSOR.slogan}</div>`:''}
       </div>
       <div class="sponsor-cta">${SPONSOR.cta}</div>
     </a>`;
 }
+
+// Tam ekran interstitial — soru geçişlerinde
+let interstitialTimer = null;
+let interstitialCallback = null;
+
+function showInterstitial(onDone){
+  if(!SPONSOR.active){ onDone(); return; }
+  interstitialCallback = onDone;
+  document.getElementById('interstitial-content').innerHTML = `
+    <a href="${SPONSOR.link}" target="_blank" rel="noopener" style="display:block;text-decoration:none;">
+      <div style="background:${SPONSOR.bg};color:${SPONSOR.color};border-radius:20px;padding:32px 24px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:16px;">
+          ${SPONSOR.logo
+            ? `<img src="${SPONSOR.logo}" style="width:80px;height:80px;border-radius:16px;object-fit:contain;">`
+            : '🎯'}
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:8px;">${SPONSOR.name}</div>
+        <div style="font-size:15px;opacity:0.8;margin-bottom:20px;">${SPONSOR.slogan}</div>
+        <div style="background:rgba(255,255,255,0.2);border-radius:10px;padding:10px 20px;font-size:14px;font-weight:700;display:inline-block;">${SPONSOR.cta}</div>
+      </div>
+    </a>`;
+
+  showScreen('interstitial');
+  let count = 3;
+  document.getElementById('interstitial-count').textContent = count;
+  interstitialTimer = setInterval(()=>{
+    count--;
+    document.getElementById('interstitial-count').textContent = count;
+    if(count <= 0){
+      clearInterval(interstitialTimer);
+      interstitialCallback?.();
+    }
+  }, 1000);
+}
+
+window.skipInterstitial = function(){
+  clearInterval(interstitialTimer);
+  interstitialCallback?.();
+};
 
 // ── KONFETİ ──
 function launchConfetti(count=60){
@@ -723,9 +777,16 @@ function handleAnswerPhase(room){
   }
   // G.typingAnswer=true ise input'a hiç dokunma — yazan kişiyi koru
 
-  // Host: tüm cevaplar gelince voting'e geç
+  // Cevap ekranında sponsor banner
+  document.getElementById('answer-sponsor').innerHTML = sponsorBanner(true);
+
+  // Host: tüm cevaplar gelince interstitial göster, sonra voting'e geç
   if(G.isHost && done >= total && total > 0){
-    setTimeout(()=> update(G.roomRef, { phase:'voting', currentQ: qIdx }), 1200);
+    setTimeout(()=>{
+      showInterstitial(()=>{
+        update(G.roomRef, { phase:'voting', currentQ: qIdx });
+      });
+    }, 1200);
   }
 }
 
@@ -769,6 +830,9 @@ function handleVotePhase(room){
 
   renderVoteAnswer();
 
+  // Oylama ekranında sponsor banner
+  document.getElementById('vote-sponsor').innerHTML = sponsorBanner(true);
+
   // Host: reveal kontrolü
   if(G.isHost){
     const votedPlayers = room.votedPlayers?.[qIdx] || {};
@@ -778,7 +842,9 @@ function handleVotePhase(room){
       G.revealTriggered = true;
       setTimeout(()=>{
         G.revealTriggered = false;
-        update(G.roomRef,{phase:'reveal', currentQ:qIdx});
+        showInterstitial(()=>{
+          update(G.roomRef,{phase:'reveal', currentQ:qIdx});
+        });
       }, 1500);
     }
   }
