@@ -394,6 +394,24 @@ function launchConfetti(count=60){
   }
 }
 
+// Eski odaları temizle (2 saatten eski)
+async function cleanupStaleRooms(){
+  try {
+    const snap = await get(ref(db,'rooms'));
+    if(!snap.exists()) return;
+    const rooms = snap.val();
+    const ONE_HOUR = 60 * 60 * 1000;
+    const now = Date.now();
+    const cleanups = [];
+    Object.entries(rooms).forEach(([code, room])=>{
+      if(room.createdAt && (now - room.createdAt) > ONE_HOUR){
+        cleanups.push(remove(ref(db,`rooms/${code}`)));
+      }
+    });
+    await Promise.all(cleanups);
+  } catch(e){}
+}
+
 function genCode(){ return (Math.floor(Math.random()*9000)+1000).toString(); }
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -530,6 +548,8 @@ window.removeCustomQ = function(i){
 };
 
 window.startWaiting = async function(){
+  // Eski odaları temizle
+  cleanupStaleRooms();
   // Seçili kategorilerden soruları topla ve karıştır
   let pool = [];
   (G.selectedCats||new Set()).forEach(id=>{
@@ -864,6 +884,13 @@ function handleScoresPhase(room){
   showScreen('scores');
   setTimeout(()=>launchConfetti(100), 300);
   const scores = room.scores||{};
+
+  // Odayı 2 dakika sonra otomatik sil — veri temiz kalsın
+  if(G.isHost){
+    setTimeout(async ()=>{
+      try { await remove(G.roomRef); } catch(e){}
+    }, 2 * 60 * 1000);
+  }
   const sorted = Object.entries(G.players)
     .map(([id,p])=>({name:p.name,avatarIdx:p.avatarIdx,score:scores[id]||0}))
     .sort((a,b)=>b.score-a.score);
