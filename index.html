@@ -175,6 +175,7 @@ textarea.input-field{height:90px;resize:none;line-height:1.5;}
       <input class="input-field" id="join-code" placeholder="Oda kodu (4 hane)" maxlength="4" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:22px;font-family:'Syne',sans-serif;font-weight:700;"/>
       <input class="input-field" id="join-name" placeholder="İsmin ne?" maxlength="20"/>
       <button class="btn btn-secondary" onclick="joinRoom()">Odaya Katıl</button>
+      <div id="lobby-sponsor" style="margin-top:16px;"></div>
     </div>
   </div>
 </div>
@@ -211,6 +212,7 @@ textarea.input-field{height:90px;resize:none;line-height:1.5;}
     <div class="players-grid" id="players-grid"></div>
     <div class="status-msg" id="wait-hint">En az 2 kişi gerekli</div>
     <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="display:none;">Oyunu Başlat!</button>
+    <div id="waiting-sponsor" style="margin-top:16px;"></div>
   </div>
 </div>
 
@@ -275,7 +277,8 @@ textarea.input-field{height:90px;resize:none;line-height:1.5;}
   <div class="scores-screen">
     <div class="score-header"><h2>Sonuçlar 🏆</h2><p>Kim en iyi tanıyor?</p></div>
     <div id="scores-list"></div>
-    <button class="btn btn-secondary" onclick="resetGame()" style="margin-top:20px;">Yeni Oyun</button>
+    <div id="scores-sponsor" style="margin-top:8px;"></div>
+    <button class="btn btn-secondary" onclick="resetGame()" style="margin-top:16px;">Yeni Oyun</button>
   </div>
 </div>
 
@@ -540,7 +543,9 @@ let G = {
 // ── INIT ──
 window.addEventListener('load', ()=>{
   G.myId = 'p_' + Math.random().toString(36).slice(2,10);
-  // Kullanıcı yazmaya başlayınca işaretle, gönderince temizle
+  // Lobby banner
+  document.getElementById('lobby-sponsor').innerHTML = sponsorBanner(true);
+  // Kullanıcı yazmaya başlayınca işaretle
   document.getElementById('ans-input').addEventListener('input', ()=>{
     G.typingAnswer = document.getElementById('ans-input').value.length > 0;
   });
@@ -743,6 +748,7 @@ function renderWaiting(room){
   const canStart = players.length >= 2;
   document.getElementById('wait-hint').textContent = canStart ? `${players.length} oyuncu hazır!` : 'En az 2 kişi gerekli';
   document.getElementById('start-btn').style.display = (G.isHost && canStart) ? 'block' : 'none';
+  document.getElementById('waiting-sponsor').innerHTML = sponsorBanner(true);
 }
 
 window.startGame = async function(){
@@ -792,6 +798,9 @@ function handleAnswerPhase(room){
     document.getElementById('ans-wait').style.display = 'none';
   }
   // G.typingAnswer=true ise input'a hiç dokunma — yazan kişiyi koru
+
+  // Her zaman banner'ı render et
+  document.getElementById('answer-sponsor').innerHTML = sponsorBanner(true);
 
   // Host: tüm cevaplar gelince voting'e geç
   if(G.isHost && done >= total && total > 0){
@@ -1031,7 +1040,8 @@ function handleScoresPhase(room){
       <div class="player-avatar ${AV[p.avatarIdx||0]}" style="width:36px;height:36px;font-size:13px;">${p.name.slice(0,2).toUpperCase()}</div>
       <div class="score-name">${p.name}</div>
       <div class="score-pts">${p.score} puan</div>
-    </div>`).join('') + sponsorBanner();
+    </div>`).join('');
+  document.getElementById('scores-sponsor').innerHTML = sponsorBanner(false);
 }
 
 window.resetGame = async function(){
