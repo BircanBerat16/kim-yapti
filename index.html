@@ -66,7 +66,22 @@ html,body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',sa
 .confetti-piece{position:fixed;width:10px;height:10px;top:-10px;border-radius:2px;animation:confettiFall linear forwards;pointer-events:none;z-index:9999;}
 @keyframes confettiFall{to{transform:translateY(110vh) rotate(720deg);opacity:0;}}
 
-.setup-screen{padding:24px;overflow-y:auto;}
+.sponsor-banner{
+  display:flex;align-items:center;gap:12px;
+  border-radius:12px;padding:12px 14px;margin:16px 0;
+  text-decoration:none;transition:opacity 0.15s;
+  border:1px solid rgba(255,255,255,0.08);
+}
+.sponsor-banner:hover{opacity:0.85;}
+.sponsor-logo{width:36px;height:36px;border-radius:8px;object-fit:contain;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.sponsor-text{flex:1;}
+.sponsor-label{font-size:10px;font-weight:500;opacity:0.5;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;}
+.sponsor-name{font-size:13px;font-weight:700;}
+.sponsor-slogan{font-size:11px;opacity:0.7;margin-top:1px;}
+.sponsor-cta{font-size:12px;font-weight:600;white-space:nowrap;padding:6px 12px;border-radius:8px;background:rgba(255,255,255,0.12);}
+
+.setup-screen h2{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:6px;}
+.setup-screen p{font-size:14px;color:var(--ink2);margin-bottom:20px;}
 .q-preset{background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:8px;cursor:pointer;font-size:14px;font-weight:500;display:flex;align-items:center;gap:10px;transition:all 0.12s;}
 .q-preset:hover{border-color:var(--accent);}
 .q-preset.selected{border-color:var(--accent);background:#fff5f1;}
@@ -273,7 +288,8 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
 // ── SORU KATEGORİLERİ ──
-const CATEGORIES = [
+// ── UTILS ──
+const AV = ['av0','av1','av2','av3','av4','av5','av6','av7'];
   {
     id: 'genel',
     name: 'Genel',
@@ -371,8 +387,37 @@ const CATEGORIES = [
   },
 ];
 
-// ── UTILS ──
-const AV = ['av0','av1','av2','av3','av4','av5','av6','av7'];
+// ── SPONSOR ──
+const SPONSOR = {
+  active: true,
+  name: "Sponsorunuzun Adı",
+  slogan: "Kısa bir slogan buraya gelecek",
+  logo: "", // URL eklenince görünür
+  link: "https://example.com",
+  cta: "Keşfet →",
+  bg: "#1a1916",
+  color: "#f5c842",
+};
+
+// ── SPONSOR BANNER ──
+function sponsorBanner(){
+  if(!SPONSOR.active) return '';
+  return `
+    <a class="sponsor-banner" href="${SPONSOR.link}" target="_blank" rel="noopener"
+      style="background:${SPONSOR.bg};color:${SPONSOR.color};">
+      <div class="sponsor-logo">
+        ${SPONSOR.logo
+          ? `<img src="${SPONSOR.logo}" style="width:100%;height:100%;border-radius:8px;object-fit:contain;">`
+          : '🎯'}
+      </div>
+      <div class="sponsor-text">
+        <div class="sponsor-label">Sponsor</div>
+        <div class="sponsor-name">${SPONSOR.name}</div>
+        <div class="sponsor-slogan">${SPONSOR.slogan}</div>
+      </div>
+      <div class="sponsor-cta">${SPONSOR.cta}</div>
+    </a>`;
+}
 
 // ── KONFETİ ──
 function launchConfetti(count=60){
@@ -865,6 +910,15 @@ function handleRevealPhase(room){
   const isLast = qIdx >= G.questions.length-1;
   document.getElementById('reveal-next-btn').style.display = isLast?'none':'block';
   document.getElementById('reveal-scores-btn').style.display = isLast?'block':'none';
+
+  // Sponsor banner — reveal ekranının altına ekle
+  let bannerEl = document.getElementById('reveal-sponsor');
+  if(!bannerEl){
+    bannerEl = document.createElement('div');
+    bannerEl.id = 'reveal-sponsor';
+    document.querySelector('.reveal-screen').appendChild(bannerEl);
+  }
+  bannerEl.innerHTML = sponsorBanner();
 }
 
 window.nextReveal = async function(){
@@ -902,7 +956,7 @@ function handleScoresPhase(room){
       <div class="player-avatar ${AV[p.avatarIdx||0]}" style="width:36px;height:36px;font-size:13px;">${p.name.slice(0,2).toUpperCase()}</div>
       <div class="score-name">${p.name}</div>
       <div class="score-pts">${p.score} puan</div>
-    </div>`).join('');
+    </div>`).join('') + sponsorBanner();
 }
 
 window.resetGame = async function(){
