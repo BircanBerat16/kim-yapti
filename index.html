@@ -51,9 +51,22 @@ html,body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',sa
 .section-lbl{font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:0.08em;margin:16px 0 10px;}
 
 /* SETUP */
-.setup-screen{padding:24px;}
-.setup-screen h2{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:6px;}
-.setup-screen p{font-size:14px;color:var(--ink2);margin-bottom:20px;}
+/* CATEGORY */
+.cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.cat-card{border-radius:14px;padding:14px 16px;cursor:pointer;border:2px solid transparent;transition:all 0.15s;position:relative;overflow:hidden;}
+.cat-card.selected{border-color:currentColor;}
+.cat-card:active{transform:scale(0.97);}
+.cat-emoji{font-size:24px;margin-bottom:6px;}
+.cat-name{font-size:14px;font-weight:700;color:var(--ink);}
+.cat-count{font-size:11px;opacity:0.7;margin-top:2px;}
+.cat-check{position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;background:currentColor;display:none;align-items:center;justify-content:center;font-size:11px;color:#fff;}
+.cat-card.selected .cat-check{display:flex;}
+
+/* CONFETTI */
+.confetti-piece{position:fixed;width:10px;height:10px;top:-10px;border-radius:2px;animation:confettiFall linear forwards;pointer-events:none;z-index:9999;}
+@keyframes confettiFall{to{transform:translateY(110vh) rotate(720deg);opacity:0;}}
+
+.setup-screen{padding:24px;overflow-y:auto;}
 .q-preset{background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:8px;cursor:pointer;font-size:14px;font-weight:500;display:flex;align-items:center;gap:10px;transition:all 0.12s;}
 .q-preset:hover{border-color:var(--accent);}
 .q-preset.selected{border-color:var(--accent);background:#fff5f1;}
@@ -154,11 +167,12 @@ textarea.input-field{height:90px;resize:none;line-height:1.5;}
 <!-- SETUP -->
 <div class="screen" id="screen-setup">
   <div class="setup-screen">
-    <h2>Sorular</h2>
-    <p>Hangi soruları sormak istiyorsunuz?</p>
-    <div class="section-lbl">Hazır sorular</div>
-    <div id="preset-list"></div>
-    <div class="section-lbl">Kendi sorun</div>
+    <h2>Soru Paketi</h2>
+    <p>Bir kategori seç veya kendi sorularını yaz.</p>
+    <div class="section-lbl">Kategoriler</div>
+    <div class="cat-grid" id="cat-grid"></div>
+    <div id="selected-preview" style="margin-top:12px;"></div>
+    <div class="section-lbl" style="margin-top:20px;">Kendi sorun</div>
     <div class="custom-q-row">
       <input class="input-field" id="custom-q" placeholder="Soru yaz..." maxlength="80"/>
       <button class="btn btn-secondary btn-sm" onclick="addCustomQ()">Ekle</button>
@@ -258,20 +272,127 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
+// ── SORU KATEGORİLERİ ──
+const CATEGORIES = [
+  {
+    id: 'genel',
+    name: 'Genel',
+    emoji: '🎯',
+    color: '#E85D26',
+    bg: '#fff5f1',
+    questions: [
+      "En son ne zaman ağladın?",
+      "Gizli bir yeteneğin var mı?",
+      "Sabah ilk ne yaparsın?",
+      "En saçma korkun ne?",
+      "Kendini hangi hayvanla özdeşleştirirsin?",
+      "Son 24 saatte en çok ne düşündün?",
+      "Hangi alışkanlığından vazgeçemiyorsun?",
+      "İnsanların sana söylemesinden en çok hoşlandığın şey?",
+      "Hangi konu hakkında çok fazla bilgin var?",
+      "Hayatında en çok ne zaman utandın?",
+    ]
+  },
+  {
+    id: 'derin',
+    name: 'Derin & Duygusal',
+    emoji: '🌊',
+    color: '#1A5EA8',
+    bg: '#EBF3FC',
+    questions: [
+      "Hayatında en çok pişman olduğun karar nedir?",
+      "Kimseye söylemediğin en büyük sırrın ne?",
+      "Gerçekten mutlu olduğunu en son ne zaman hissettin?",
+      "Korkularından dolayı vazgeçtiğin bir şey var mı?",
+      "Hayatını değiştiren bir an oldu mu?",
+      "Kendine en çok ne zaman yabancı hissediyorsun?",
+      "Çocukken olmak istediğin kişi ile şimdiki sen arasındaki fark nedir?",
+      "En çok kimi kaybetmekten korkuyorsun?",
+      "Kendini affetmekte zorlandığın bir şey var mı?",
+      "Hayatında değiştiremeyeceğin ama keşke değiştirebilseydim dediğin bir şey?",
+    ]
+  },
+  {
+    id: 'utandirici',
+    name: 'Utandırıcı 😳',
+    emoji: '😳',
+    color: '#C026D3',
+    bg: '#FAF0FF',
+    questions: [
+      "En garip yerde uyuduğun yer neresi?",
+      "Hayatında yaptığın en aptalca şey nedir?",
+      "Sosyal medyada sildiğin en utanç verici paylaşım neydi?",
+      "Yanlışlıkla yanlış kişiye attığın en kötü mesaj neydi?",
+      "En son ne zaman yalan söyledin ve ne hakkında?",
+      "Kimseye söylemediğin en tuhaf alışkanlığın nedir?",
+      "Hayatında en çok mahcup olduğun an neydi?",
+      "Bir şeyi berbat ettiğinde genellikle ne yaparsın?",
+      "En kötü tarih deneyimin neydi?",
+      "Gizlice yaptığın ama söylemekten çekindiğin bir şey var mı?",
+    ]
+  },
+  {
+    id: 'bel_alti',
+    name: 'Bel Altı 🔥',
+    emoji: '🔥',
+    color: '#DC2626',
+    bg: '#FFF1F1',
+    questions: [
+      "Hayatında kaç kişiyle öpüştün?",
+      "İlk öpücüğün nasıldı?",
+      "Crush'ına itirafta bulundun mu hiç?",
+      "En uzun ilişkin ne kadar sürdü ve neden bitti?",
+      "Şu an sevdiğin biri var mı odada?",
+      "Hayatındaki en büyük flört felaketini anlat",
+      "Bir kişiyi görmek için saçma bahaneler ürettin mi?",
+      "En garip flört girişiminde sana ne söylendi?",
+      "Hayatında 'keşke olsaydı' dediğin bir ilişki var mı?",
+      "En uzun süre crush olduğun kişiyi kaç ay/yıl sevdin?",
+    ]
+  },
+  {
+    id: 'serbest',
+    name: 'Serbest 🎲',
+    emoji: '🎲',
+    color: '#059669',
+    bg: '#ECFDF5',
+    questions: [
+      "Şu an aklından geçen ilk kelime ne?",
+      "Odada en çok kimi tanıyorsun?",
+      "Bu grupta en çok kime güvenirsin?",
+      "Bu grupta seni en iyi kim tanır?",
+      "Grubun en komik anısı nedir?",
+      "Şu an ne düşünüyorsun, dürüstçe?",
+      "Bu gece burada olman hakkında ne hissediyorsun?",
+      "Bu gruptaki en iyi anın neydi?",
+      "Grupta herkese söylemek isteyip söyleyemediğin bir şey var mı?",
+      "Bu grubu tek kelimeyle tanımla.",
+    ]
+  },
+];
+
 // ── UTILS ──
 const AV = ['av0','av1','av2','av3','av4','av5','av6','av7'];
-const PRESETS = [
-  "En son ne zaman ağladın?",
-  "Gizli bir yeteneğin var mı?",
-  "Hayatında en çok ne zaman utandın?",
-  "Hangi alışkanlığından vazgeçemiyorsun?",
-  "Sabah ilk ne yaparsın?",
-  "En saçma korkun ne?",
-  "Kendini hangi hayvanla özdeşleştirirsin?",
-  "Son 24 saatte en çok ne düşündün?",
-  "Hangi konu hakkında çok fazla bilgin var?",
-  "İnsanların sana söylemesinden en çok hoşlandığın şey?",
-];
+
+// ── KONFETİ ──
+function launchConfetti(count=60){
+  const colors=['#e85d26','#f5c842','#2d7a4f','#1a5ea8','#c026d3','#dc2626','#ff8a5c'];
+  for(let i=0;i<count;i++){
+    const el=document.createElement('div');
+    el.className='confetti-piece';
+    el.style.cssText=`
+      left:${Math.random()*100}vw;
+      background:${colors[Math.floor(Math.random()*colors.length)]};
+      width:${6+Math.random()*8}px;
+      height:${6+Math.random()*8}px;
+      border-radius:${Math.random()>0.5?'50%':'2px'};
+      animation-duration:${1.5+Math.random()*2}s;
+      animation-delay:${Math.random()*0.5}s;
+    `;
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(),(3+Math.random()*2)*1000);
+  }
+}
 
 function genCode(){ return (Math.floor(Math.random()*9000)+1000).toString(); }
 function showScreen(id){
@@ -316,6 +437,8 @@ window.createRoom = async function(){
   const name = document.getElementById('host-name').value.trim();
   if(!name){ toast('İsmin olmadan olmaz!'); return; }
   G.myName = name; G.isHost = true;
+  G.selectedCats = new Set();
+  G.customQuestions = [];
   renderSetup();
   showScreen('setup');
 };
@@ -349,54 +472,91 @@ window.joinRoom = async function(){
 
 // ── SETUP ──
 function renderSetup(){
-  document.getElementById('preset-list').innerHTML = PRESETS.map((q,i)=>`
-    <div class="q-preset ${G.selectedPresets.has(i)?'selected':''}" onclick="togglePreset(${i})">
-      <div class="q-check">${G.selectedPresets.has(i)?'✓':''}</div>
-      <span>${q}</span>
+  const grid = document.getElementById('cat-grid');
+  grid.innerHTML = CATEGORIES.map(cat=>`
+    <div class="cat-card ${G.selectedCats?.has(cat.id)?'selected':''}"
+      style="background:${cat.bg};color:${cat.color};"
+      onclick="toggleCat('${cat.id}')">
+      <div class="cat-check">✓</div>
+      <div class="cat-emoji">${cat.emoji}</div>
+      <div class="cat-name">${cat.name}</div>
+      <div class="cat-count">${cat.questions.length} soru</div>
     </div>`).join('');
+  renderSelectedPreview();
 }
-window.togglePreset = function(i){
-  G.selectedPresets.has(i) ? G.selectedPresets.delete(i) : G.selectedPresets.add(i);
+
+function renderSelectedPreview(){
+  const total = [...(G.selectedCats||[])].reduce((sum,id)=>{
+    const cat = CATEGORIES.find(c=>c.id===id);
+    return sum + (cat?.questions.length||0);
+  }, 0) + (G.customQuestions?.length||0);
+  const el = document.getElementById('selected-preview');
+  if(total===0){
+    el.innerHTML = '<div style="font-size:13px;color:var(--ink3);text-align:center;padding:8px;">En az bir kategori seç</div>';
+  } else {
+    el.innerHTML = `<div style="font-size:13px;color:var(--ink2);text-align:center;padding:8px;">
+      Toplam <b>${Math.min(total,10)}</b> soru oynanacak (maks. 10)
+    </div>`;
+  }
+}
+
+window.toggleCat = function(id){
+  if(!G.selectedCats) G.selectedCats = new Set();
+  G.selectedCats.has(id) ? G.selectedCats.delete(id) : G.selectedCats.add(id);
   renderSetup();
 };
+
 window.addCustomQ = function(){
   const inp = document.getElementById('custom-q');
   const q = inp.value.trim(); if(!q) return;
+  if(!G.customQuestions) G.customQuestions = [];
   G.customQuestions.push(q); inp.value='';
-  document.getElementById('custom-q-list').innerHTML = G.customQuestions.map((q,i)=>`
+  renderCustomQList();
+  renderSelectedPreview();
+};
+
+function renderCustomQList(){
+  document.getElementById('custom-q-list').innerHTML = (G.customQuestions||[]).map((q,i)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--card);border:1.5px solid var(--border);border-radius:10px;margin-bottom:6px;font-size:13px;">
       <span style="flex:1">${q}</span>
       <button onclick="removeCustomQ(${i})" style="background:none;border:none;color:var(--ink3);cursor:pointer;font-size:18px;">×</button>
     </div>`).join('');
-};
+}
+
 window.removeCustomQ = function(i){
   G.customQuestions.splice(i,1);
-  window.addCustomQ.call({value:''}); // re-render
-  document.getElementById('custom-q').value='';
-  window.addCustomQ();
+  renderCustomQList();
+  renderSelectedPreview();
 };
 
 window.startWaiting = async function(){
-  const selected = [...G.selectedPresets].map(i=>PRESETS[i]);
-  G.questions = [...selected, ...G.customQuestions].slice(0,8);
-  if(G.questions.length===0) G.questions = PRESETS.slice(0,5);
+  // Seçili kategorilerden soruları topla ve karıştır
+  let pool = [];
+  (G.selectedCats||new Set()).forEach(id=>{
+    const cat = CATEGORIES.find(c=>c.id===id);
+    if(cat) pool.push(...cat.questions);
+  });
+  // Karıştır
+  for(let i=pool.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [pool[i],pool[j]]=[pool[j],pool[i]];
+  }
+  // Özel sorular başa ekle
+  G.questions = [...(G.customQuestions||[]), ...pool].slice(0,10);
+  if(G.questions.length===0){
+    toast('En az bir kategori veya soru seç!'); return;
+  }
 
   G.roomCode = genCode();
   G.roomRef = ref(db, `rooms/${G.roomCode}`);
 
-  const avatarIdx = 0;
   const roomData = {
     phase: 'waiting',
     hostId: G.myId,
     questions: G.questions,
-    players: {
-      [G.myId]: { name: G.myName, avatarIdx, joinedAt: Date.now() }
-    },
-    answers: {},
-    votes: {},
-    scores: {},
-    currentQ: 0,
-    createdAt: Date.now()
+    players: { [G.myId]: { name: G.myName, avatarIdx: 0, joinedAt: Date.now() } },
+    answers: {}, votes: {}, scores: {}, votedPlayers: {},
+    currentQ: 0, createdAt: Date.now()
   };
 
   await set(G.roomRef, roomData);
@@ -624,6 +784,7 @@ window.confirmVote = async function(){
   document.getElementById('vote-done-msg').style.display='block';
   document.querySelectorAll('.vote-btn').forEach(b=>b.style.pointerEvents='none');
   toast(correct ? '✓ Doğru tahmin! +1 puan' : '✗ Yanlış tahmin');
+  if(correct) setTimeout(()=>launchConfetti(40), 200);
 
   const isLastAnswer = G.currentAnsIdx >= G.voteAnswers.length - 1;
   if(isLastAnswer){
@@ -701,6 +862,7 @@ window.showScores = async function(){
 // ── SCORES PHASE ──
 function handleScoresPhase(room){
   showScreen('scores');
+  setTimeout(()=>launchConfetti(100), 300);
   const scores = room.scores||{};
   const sorted = Object.entries(G.players)
     .map(([id,p])=>({name:p.name,avatarIdx:p.avatarIdx,score:scores[id]||0}))
@@ -721,9 +883,10 @@ window.resetGame = async function(){
   G.unsubscribers.forEach(u=>u());
   G = { myId:'p_'+Math.random().toString(36).slice(2,10), myName:'', isHost:false,
     roomCode:'', roomRef:null, players:{}, questions:[],
-    selectedPresets:new Set(), customQuestions:[],
+    selectedCats: new Set(), customQuestions:[],
     currentQ:0, currentAnsIdx:0, revealQ:0,
-    myAnswers:{}, myVotes:{}, selectedVote:null, unsubscribers:[] };
+    myAnswers:{}, myVotes:{}, selectedVote:null, unsubscribers:[],
+    typingAnswer:false, lastVoteQ:null, revealTriggered:false };
   document.getElementById('host-name').value='';
   document.getElementById('join-code').value='';
   document.getElementById('join-name').value='';
