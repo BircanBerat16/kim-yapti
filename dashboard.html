@@ -205,8 +205,14 @@ function renderDashboard(rooms){
   const entries = Object.entries(rooms);
   const activePhases = ['waiting','answering','voting','reveal'];
 
-  // Aktif odalar
-  const active = entries.filter(([,r])=>activePhases.includes(r.phase));
+  const ONE_HOUR = 60 * 60 * 1000;
+  const now = Date.now();
+
+  // Aktif odalar: son 1 saatte açılmış VE henüz bitmemiş
+  const active = entries.filter(([,r])=>
+    activePhases.includes(r.phase) &&
+    r.createdAt && (now - r.createdAt) < ONE_HOUR
+  );
   const totalPlayers = active.reduce((s,[,r])=>s+Object.keys(r.players||{}).length,0);
   const allPlayerCounts = entries.map(([,r])=>Object.keys(r.players||{}).length).filter(n=>n>0);
   const avgGroup = allPlayerCounts.length
