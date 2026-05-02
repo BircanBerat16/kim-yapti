@@ -288,8 +288,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 
 // ── SORU KATEGORİLERİ ──
-// ── UTILS ──
-const AV = ['av0','av1','av2','av3','av4','av5','av6','av7'];
+const CATEGORIES = [
   {
     id: 'genel',
     name: 'Genel',
@@ -386,6 +385,9 @@ const AV = ['av0','av1','av2','av3','av4','av5','av6','av7'];
     ]
   },
 ];
+
+// ── UTILS ──
+const AV = ['av0','av1','av2','av3','av4','av5','av6','av7'];
 
 // ── SPONSOR ──
 const SPONSOR = {
